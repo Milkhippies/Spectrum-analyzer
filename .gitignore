@@ -338,3 +338,10 @@ ASALocalRun/
 
 # BeatPulse healthcheck temp database
 healthchecksdb
+/TestApp/Class1.cs
+/car.jpg
+/TestApp/Properties/AssemblyInfo.cs
+/TestApp/Properties/Resources.Designer.cs
+/TestApp/Properties/Resources.resx
+/TestApp/Properties/Settings.Designer.cs
+/TestApp/Properties/Settings.settings

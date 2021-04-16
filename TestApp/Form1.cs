@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Text;
 using System.Windows.Forms;
 
@@ -15,16 +16,17 @@ namespace TestApp
             InitializeComponent();
         }
 
+        string WAVLink;
 
         private void button1_Click(object sender, EventArgs e)
         {
             StringBuilder sb = new StringBuilder();
 
-
             var header = new data.WavHeader();
+
             // Размер заголовка
             var headerSize = Marshal.SizeOf(header);
-            var fileStream = new FileStream("abc.wav", FileMode.Open, FileAccess.Read);
+            var fileStream = new FileStream(WAVLink, FileMode.Open, FileAccess.Read);
             var buffer = new byte[headerSize];
 
 
@@ -107,7 +109,6 @@ namespace TestApp
                 chart2.Series[0].Points.AddXY(i*header.SampleRate/(header.ChunkSize/header.BlockAlign), complexData[i].Magnitude+0.01);
             }
 
-            //label7.Text = Convert.ToString(data[0,110012]);
             label7.Text = Convert.ToString("SampleRate: " + header.SampleRate + " Elements: " + header.ChunkSize / header.BlockAlign);
 
             fileStream.Close();
@@ -129,6 +130,23 @@ namespace TestApp
             chart2.ChartAreas[0].AxisX.ScaleView.SmallScrollSize = blockSize;
             chart2.ChartAreas[0].AxisX.LabelStyle.Angle = 90;
             chart2.ChartAreas[0].AxisX.LabelStyle.Interval = 150;
+        }
+
+
+        public void button3_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog openFileDialog1 = new OpenFileDialog();
+
+            openFileDialog1.InitialDirectory = "c:\\";
+            openFileDialog1.Filter = "WAV (*.wav)|*.wav";
+
+
+            if (openFileDialog1.ShowDialog() == DialogResult.OK)
+            {
+                string selectedFileName = openFileDialog1.FileName;
+                WAVLink = openFileDialog1.FileName;
+            }
+            label7.Text = WAVLink;
         }
     }
 
