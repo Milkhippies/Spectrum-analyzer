@@ -1,8 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Security;
-using System.Text;
 using System.Windows.Forms;
 
 namespace TestApp
@@ -14,15 +13,25 @@ namespace TestApp
         public Form1()
         {
             InitializeComponent();
+            
+            comboBox1.Items.Add("None");
+            comboBox1.Items.Add("Rectangular");
+            comboBox1.Items.Add("Hann");
+            comboBox1.Items.Add("Hamming");
+            comboBox1.Items.Add("Blackmann");
+            comboBox1.Items.Add("Blackmann-Harris");
+            comboBox1.Items.Add("Barlett");
+            comboBox1.Items.Add("Natall");
+            comboBox1.Items.Add("Gauss 0.1");
+            comboBox1.Items.Add("Flat peak");
         }
 
         string WAVLink;
 
-        private void button1_Click(object sender, EventArgs e)
+        public void button1_Click(object sender, EventArgs e)
         {
-            StringBuilder sb = new StringBuilder();
 
-            var header = new data.WavHeader();
+            var header = new DataStruct.WavHeader();
 
             // Размер заголовка
             var headerSize = Marshal.SizeOf(header);
@@ -35,18 +44,14 @@ namespace TestApp
             Marshal.Copy(buffer, 0, headerPtr, headerSize); // Копируем считанные байты из файла в выделенный блок памяти
             Marshal.PtrToStructure(headerPtr, header);  // Преобразовываем указатель на блок памяти к нашей структуре
 
-            // Посчитаем длительность воспроизведения в секундах
-            var durationSeconds = 1.0 * header.Subchunk2Size / (header.BitsPerSample / 8.0) / header.NumChannels / header.SampleRate;
-            var durationMinutes = (int)Math.Floor(durationSeconds / 60);
-            durationSeconds = durationSeconds - (durationMinutes * 60);
+            var dataRange = header.ChunkSize / header.BlockAlign;
+            var koef = 1; // костыль, по идее не нужен. используется чтобы сократить массив комплексных чисел на К, изменить масштабы и всю отрисовку
 
-            Int16[] Hwav = new Int16[header.ChunkSize];
-            AForge.Math.Complex[] spectr = new AForge.Math.Complex[header.ChunkSize / header.BlockAlign];
-            AForge.Math.Complex[] complexData = new AForge.Math.Complex[header.ChunkSize / header.BlockAlign];
+            AForge.Math.Complex[] complexData = new AForge.Math.Complex[dataRange/koef];
 
             int[,] data; // данные файла [номер канала, значение]
 
-            data = new int[header.NumChannels, header.ChunkSize / header.BlockAlign];
+            data = new int[header.NumChannels, dataRange];
             buffer = new byte[header.Subchunk2Size];
             fileStream.Read(buffer, 0, (int)header.Subchunk2Size);
 
@@ -93,30 +98,126 @@ namespace TestApp
                 chart1.Series[0].Points.AddXY(i, data[0,i]);
             }
 
-            for (int i = 0; i < header.ChunkSize / header.BlockAlign; i++)
+            for (int i = 0; i < dataRange/2 /koef; i++)
             {
                 complexData[i] = (AForge.Math.Complex)data[0, i];
             }
 
 
-            var dir = new AForge.Math.FourierTransform.Direction();
-            dir = (AForge.Math.FourierTransform.Direction)1;
-            AForge.Math.FourierTransform.DFT(complexData, dir);
+            var nSize = 16384;
 
+            var numArr = (header.ChunkSize / header.BlockAlign) / nSize;
 
-            for (int i = 0; i < header.ChunkSize / header.BlockAlign / 2; i++)
+            AForge.Math.Complex[,] newComplex = new AForge.Math.Complex[numArr, nSize];
+            AForge.Math.Complex[] tempComplex = new AForge.Math.Complex[nSize];
+
+            List<AForge.Math.Complex> finalComplex = new List<AForge.Math.Complex>();
+
+            for (int i = 0; i < numArr; i++)
             {
-                chart2.Series[0].Points.AddXY(i*header.SampleRate/(header.ChunkSize/header.BlockAlign), complexData[i].Magnitude+0.01);
+                for (int j = 0; j < nSize; j++) {
+                    newComplex[i, j] = complexData[j + i * nSize]; // тут записываем одномерный массив в двумерный
+                }
             }
 
-            label7.Text = Convert.ToString("SampleRate: " + header.SampleRate + " Elements: " + header.ChunkSize / header.BlockAlign);
+            for (int i = 0; i < numArr; i++) {
+
+                switch (comboBox1.SelectedItem)
+                {
+                    case "None":
+
+                        for (int k = 0; k < nSize; k++)
+                        {
+                            tempComplex[k] = newComplex[i, k]; // тут по строкам забираем данные чтобы потом их в fft
+                        }; 
+                        break;
+
+                    case "Hann":
+
+                        for (int k = 0; k < nSize; k++)
+                        {
+                            tempComplex[k] = newComplex[i, k] * (0.5 - 0.5 * Math.Cos((2 * Math.PI * k) / (nSize - 1))); 
+                        }; 
+                        break;
+
+                    case "Rectangular":
+                        for (int k = 0; k < nSize; k++)
+                        {
+                            tempComplex[k] = newComplex[i, k] * 1; // тут по строкам забираем данные чтобы потом их в fft и попутно умножаем на окно
+                        }; 
+                        break;
+
+                    case "Hamming":
+                        for (int k = 0; k < nSize; k++)
+                        {
+                            tempComplex[k] = newComplex[i, k] * (0.54 - 0.46 * Math.Cos((2 * Math.PI * k) / (nSize - 1))); 
+                        }; 
+                        break;
+
+                    case "Blackmann":
+                        for (int k = 0; k < nSize; k++)
+                        {
+                            tempComplex[k] = newComplex[i, k] * (0.42 - 0.5 * Math.Cos((2 * Math.PI * k) / (nSize - 1)) + 0.08 * Math.Cos((4 * Math.PI * k) / (nSize - 1)));
+                        }
+                        break;
+
+                    case "Barlett":
+                        for (int k = 0; k < nSize; k++)
+                        {
+                            tempComplex[k] = newComplex[i, k] * (nSize - 2 * Math.Abs(k - (nSize/2)))/ nSize;
+                        }
+                        break;
+
+                    case "Blackmann-Harris":
+                        for (int k = 0; k < nSize; k++)
+                        {
+                            tempComplex[k] = newComplex[i, k] * (0.35875 - 0.48829 * Math.Cos((2 * Math.PI * k) / (nSize - 1)) + 0.14128 * Math.Cos((4 * Math.PI * k) / (nSize - 1)) - 0.01168 * Math.Cos((6 * Math.PI * k) / (nSize - 1)));
+                        }
+                        break;
+
+                    case "Natall":
+                        for (int k = 0; k < nSize; k++)
+                        {
+                            tempComplex[k] = newComplex[i, k] * (0.355768 - 0.487396 * Math.Cos((2 * Math.PI * k) / (nSize - 1)) + 0.144232 * Math.Cos((4 * Math.PI * k) / (nSize - 1)) - 0.012604 * Math.Cos((6 * Math.PI * k) / (nSize - 1)));
+                        }
+                        break;
+
+                    case "Gauss 0.1":
+                        for (int k = 0; k < nSize; k++)
+                        {
+                            tempComplex[k] = newComplex[i, k] * Math.Exp(-(2 * Math.Pow(k-((nSize-1)/2),2))/(Math.Pow(nSize*0.1,2)));
+                        }
+                        break;
+
+                    case "Flat peak":
+                        for (int k = 0; k < nSize; k++)
+                        {
+                            tempComplex[k] = newComplex[i, k] * (1 - 1.93 * Math.Cos((2 * Math.PI * k) / (nSize - 1)) + 1.29 * Math.Cos((4 * Math.PI * k) / (nSize - 1)) - 0.388 * Math.Cos((6 * Math.PI * k) / (nSize - 1)) + 0.032 * Math.Cos((8 * Math.PI * k) / (nSize - 1)));
+                        }
+                        break;
+
+                }
+
+                AForge.Math.FourierTransform.FFT(tempComplex, AForge.Math.FourierTransform.Direction.Forward); // fft
+
+                for (int j = 0; j < nSize; j++){
+                    finalComplex.Add(tempComplex[j]); // добавляем результат fft в одномерный финальный массив
+                }
+
+            }
+
+
+            for (int i = 0; i < finalComplex.Count/(2*numArr); i++)
+            {
+               chart2.Series[0].Points.AddXY(i * header.SampleRate / nSize, finalComplex[i].Magnitude);
+            }
+
+            label7.Text = Convert.ToString("SampleRate: " + header.SampleRate + " Elements: " + header.ChunkSize / header.BlockAlign + " numArr: " + numArr + " window: " + comboBox1.SelectedItem);
 
             fileStream.Close();
 
         }
 
-
-       
 
         private void button2_Click(object sender, EventArgs e)
         {
@@ -124,12 +225,12 @@ namespace TestApp
             chart2.ChartAreas[0].CursorX.AutoScroll = true;
             chart2.ChartAreas[0].AxisX.ScaleView.Zoomable = true;
             int position = 0;
-            int blockSize = 5000;
+            int blockSize = 500; // для больших 100 для маленьких 5000
             int size = blockSize;
             chart2.ChartAreas[0].AxisX.ScaleView.Zoom(position, size);
             chart2.ChartAreas[0].AxisX.ScaleView.SmallScrollSize = blockSize;
             chart2.ChartAreas[0].AxisX.LabelStyle.Angle = 90;
-            chart2.ChartAreas[0].AxisX.LabelStyle.Interval = 150;
+            chart2.ChartAreas[0].AxisX.LabelStyle.Interval = 50; // для больших 50, для маленьник 150
         }
 
 
@@ -147,6 +248,11 @@ namespace TestApp
                 WAVLink = openFileDialog1.FileName;
             }
             label7.Text = WAVLink;
+        }
+
+        private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
         }
     }
 

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-namespace TestApp.data
+namespace TestApp.DataStruct
 {
     [StructLayout(LayoutKind.Sequential)]
     // Структура, описывающая заголовок WAV файла.
